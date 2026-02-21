@@ -5,9 +5,6 @@ import { PASSPORT_OPTIONS } from './constants'
 import { PassportOptions } from './interfaces'
 import { base64UrlDecode, base64UrlEncode, constantTimeEqual } from './utils'
 
-const HMAC_DOMAIN = 'PassportTokenAuth/v1'
-const INTERNAL_SEP = '|'
-
 @Injectable()
 export class PassportService {
 	private readonly SECRET_KEY: string
@@ -22,14 +19,14 @@ export class PassportService {
 	}
 
 	public serialize(user: string, iat: string, exp: string) {
-		return [HMAC_DOMAIN, user, iat, exp].join(INTERNAL_SEP)
+		return [PassportService.HMAC_DOMAIN, user, iat, exp].join(PassportService.INTERNAL_SEP)
 	}
 
-	public computeHmac(secretKey: string, payload: string) {
-		return createHmac('sha256', secretKey).update(payload).digest('base64')
+	public computeHmac(payload: string) {
+		return createHmac('sha256', this.SECRET_KEY).update(payload).digest('base64')
 	}
 
-	public generateToken(secretKey: string, userId: string, ttl: number) {
+	public generateToken(userId: string, ttl: number) {
 		const issuedAt = this.now()
 		const expiresAt = issuedAt + ttl
 
@@ -38,19 +35,19 @@ export class PassportService {
 		const expPart = base64UrlEncode(expiresAt.toString())
 
 		const serialized = this.serialize(userPart, iatPart, expPart)
-		const hmac = this.computeHmac(secretKey, serialized)
+		const hmac = this.computeHmac(serialized)
 
 		return `${userPart}.${iatPart}.${expPart}.${hmac}`
 	}
 
-	public verifyToken(secretKey: string, token: string) {
+	public verifyToken(token: string) {
 		const parts = token.split('.')
 		if (parts.length !== 4)
 			return { valid: false, reason: 'Invalid token format' }
 		const [userPart, iatPart, expPart, hmacPart] = parts
 
 		const serialized = this.serialize(userPart, iatPart, expPart)
-		const hmac = this.computeHmac(secretKey, serialized)
+		const hmac = this.computeHmac(serialized)
 
 		if (!constantTimeEqual(hmac, hmacPart))
 			return { valid: false, reason: 'Invalid HMAC' }
